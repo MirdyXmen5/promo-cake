@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="text-center mb-3">
+            <small class="text-muted">Пользователь: <b>{{ current_user.username }}</b></small>
+            <a href="/logout" class="text-danger ms-2">Выйти</a>
+        </div>
+
+        <div class="card card-custom p-3 text-center">
+            <h2 class="mb-3">📸 Сканирование</h2>
+            
+            <div id="reader" style="width: 100%; border-radius: 10px; overflow: hidden;"></div>
+
+            <form action="/check" method="POST" id="scanForm" class="mt-3">
+                <div class="input-group">
+                    <input type="text" name="code" id="codeInput" class="form-control" placeholder="Или введите код вручную" autocomplete="off">
+                    <button type="submit" class="btn btn-primary">Проверить</button>
+                </div>
+            </form>
+            
+            <div id="scanResult" class="mt-2 text-success fw-bold"></div>
+        </div>
+
+        {% if current_user.username == 'admin' %}
+        <div class="mt-4 text-center">
+            <a href="/admin_stats" class="btn btn-outline-secondary">📊 Статистика</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+<script>
+    function onScanSuccess(decodedText, decodedResult) {
+        // Успех! Код найден
+        console.log(`Scan result: ${decodedText}`);
+        
+        // 1. Показываем результат (опционально)
+        // document.getElementById('scanResult').innerText = "Нашел: " + decodedText;
+
+        // 2. Вставляем в форму и отправляем
+        document.getElementById('codeInput').value = decodedText;
+        document.getElementById('scanForm').submit();
+        
+        // 3. Останавливаем камеру
+        html5QrCode.stop().then((ignore) => {
+            // QR Code scanning is stopped.
+        }).catch((err) => {
+            // Stop failed, handle it.
+        });
+    }
+
+    // Инициализация (используем ID твоего div-а 'reader')
+    const html5QrCode = new Html5Qrcode("reader");
+
+    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+    
+    // Запускаем камеру
+    // facingMode: "environment" - это задняя камера (на телефонах).
+    // На ноутбуке он просто включит вебку.
+    html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
+    .catch(err => {
+        // Если ошибка запуска - выводим её на экран, чтобы ты увидел!
+        console.error("Ошибка камеры:", err);
+        document.getElementById('reader').innerHTML = 
+            `<div class="alert alert-danger">Ошибка камеры: ${err}</div>`;
+    });
+</script>
+{% endblock %}

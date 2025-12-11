@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head><title>Результат</title></head>
+<body style="font-family: sans-serif; text-align: center; padding: 30px;">
+    
+    {% if status == 'win' %}
+        <div style="background-color: #d4edda; color: #155724; padding: 40px; border-radius: 10px;">
+            <h1 style="font-size: 50px;">🎉 ВЫИГРЫШ! 🎉</h1>
+            <h2>Сумма: {{ amount }} тенге</h2>
+            <p>Код: {{ code }} успешно погашен.</p>
+        </div>
+    {% elif status == 'lose' %}
+        <div style="background-color: #e2e3e5; color: #383d41; padding: 40px; border-radius: 10px;">
+            <h1>Пусто 😔</h1>
+            <p>{{ message }}</p>
+        </div>
+    {% elif status == 'warning' %}
+        <div style="background-color: #fff3cd; color: #856404; padding: 40px; border-radius: 10px; border: 5px solid red;">
+            <h1>⛔ ОШИБКА! ⛔</h1>
+            <h2>{{ message }}</h2>
+            <p>Не выдавать деньги!</p>
+        </div>
+    {% else %}
+        <h1 style="color: red">{{ message }}</h1>
+    {% endif %}
+
+    <br><br>
+    <a href="/" style="font-size: 20px; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;">Вернуться к сканеру</a>
+</body>
+</html>
