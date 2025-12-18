@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2 class="mb-4 text-center">📊 Отчет для Руководства</h2>
+
+    <div class="row mb-4 text-center">
+        <div class="col-md-4">
+            <div class="card text-white bg-primary mb-3 shadow">
+                <div class="card-header">Всего сканирований</div>
+                <div class="card-body">
+                    <h1 class="card-title">{{ total_scans }}</h1>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-success mb-3 shadow">
+                <div class="card-header">Выдано денег (₸)</div>
+                <div class="card-body">
+                    <h1 class="card-title">{{ total_money | int }} ₸</h1>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-warning mb-3 shadow">
+                <div class="card-header">Выигрышных билетов</div>
+                <div class="card-body">
+                    <h1 class="card-title">{{ total_wins }}</h1>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if suspicious %}
+    <div class="card mb-4 border-danger">
+        <div class="card-header bg-danger text-white">
+            🚨 <b>Подозрительная активность</b> (Ошибки и повторы)
+        </div>
+        <div class="card-body">
+            <ul class="list-group list-group-flush">
+            {% for user, count in suspicious %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    Пользователь <b>{{ user }}</b>
+                    <span class="badge bg-danger rounded-pill">{{ count }} раз(а) ошибся/повторил</span>
+                </li>
+            {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card shadow">
+        <div class="card-header bg-dark text-white">
+            📜 История операций (Последние 50)
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-striped mb-0">
+                <thead>
+                    <tr>
+                        <th>Время</th>
+                        <th>Директор</th>
+                        <th>Код</th>
+                        <th>Статус</th>
+                        <th>Детали</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td>{{ log.timestamp.strftime('%d.%m %H:%M') }}</td>
+                        <td><b>{{ log.username }}</b></td>
+                        <td><small>{{ log.code_input }}</small></td>
+                        <td>
+                            {% if log.status == 'WIN' %}
+                                <span class="badge bg-success">ВЫИГРЫШ</span>
+                            {% elif log.status == 'LOSE' %}
+                                <span class="badge bg-secondary">ПУСТО</span>
+                            {% elif log.status == 'ERROR' %}
+                                <span class="badge bg-danger">ОШИБКА</span>
+                            {% elif log.status == 'USED_AGAIN' %}
+                                <span class="badge bg-warning text-dark">ПОВТОР</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ log.details }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div class="text-center mt-4 mb-5">
+        <a href="/" class="btn btn-outline-primary btn-lg">⬅ Вернуться к сканеру</a>
+    </div>
+</div>
+{% endblock %}

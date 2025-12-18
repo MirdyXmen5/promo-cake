@@ -5,12 +5,11 @@ Then install requirements:
 pip install -r requirements.txt
 
 Then run docker compose:
-docker compose -d up
+docker compose up -d
 
 Then run app:
 python app.py
 
-Then import codes:
+Then import codes and users:
 python import_codes.py
-
-
+python import_users.py

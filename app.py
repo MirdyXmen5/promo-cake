@@ -1,14 +1,18 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
-from flask_sqlalchemy import SQLAlchemy
+from flask_sqlalchemy import SQLAlchemy 
+from sqlalchemy.sql import func # func добавлен для отчетов
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import datetime
+# Импортируем UUID для генерации сложных ключей
+import uuid
 
 # --- КОНФИГУРАЦИЯ ---
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'super-secret-key-change-me' # Поменяй на что-то сложное!
-# СТАЛО (PostgreSQL):
-# Формат: postgresql://USER:PASSWORD@HOST:PORT/DB_NAME
+app.config['SECRET_KEY'] = str(uuid.uuid4()) # Генерируем новый секретный ключ при каждом старте (для продакшена лучше задать один раз)
+
+# ПОДКЛЮЧЕНИЕ К POSTGRESQL (ЛОКАЛЬНО)
+# ВАЖНО: При деплое в Docker-Compose нужно будет заменить 'localhost' на 'db'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:147852@localhost:5432/promodb'
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
@@ -22,26 +26,35 @@ class User(UserMixin, db.Model):
 
 class PromoCode(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String(50), unique=True, index=True) # Сам QR-код (строка)
-    prize_amount = db.Column(db.Integer, default=0) # Сумма выигрыша (0 если нет приза)
-    is_used = db.Column(db.Boolean, default=False) # Использован ли?
-    used_at = db.Column(db.DateTime, nullable=True) # Когда использовали
-    used_by = db.Column(db.String(100), nullable=True) # Кто активировал (имя директора)
+    code = db.Column(db.String(50), unique=True, index=True) 
+    prize_amount = db.Column(db.Integer, default=0) 
+    is_used = db.Column(db.Boolean, default=False) 
+    used_at = db.Column(db.DateTime, nullable=True) 
+    used_by = db.Column(db.String(100), nullable=True) 
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# --- МАРШРУТЫ (РОУТЫ) ---
+# --- МОДЕЛЬ ЛОГОВ (ОТЧЕТОВ) ---
+class ScanLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime, default=datetime.datetime.now)
+    username = db.Column(db.String(100)) 
+    code_input = db.Column(db.String(100)) 
+    status = db.Column(db.String(50)) 
+    details = db.Column(db.String(200)) 
+
+# --- РОУТЫ (Без изменений) ---
 
 @app.route('/')
 @login_required
 def index():
-    # Главная страница - поле для ввода кода
     return render_template('index.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # ... (код логина без изменений) ...
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -63,41 +76,80 @@ def logout():
 @app.route('/check', methods=['POST'])
 @login_required
 def check_code():
+    # ... (логика проверки и записи логов ScanLog, которую мы финализировали) ...
     code_input = request.form.get('code').strip()
     
-    # Ищем код в базе
+    status_log = ""
+    details_log = ""
     promo = PromoCode.query.filter_by(code=code_input).first()
+    template_response = None
 
     if not promo:
-        return render_template('result.html', status='error', message="Код не найден в системе!")
+        status_log = "ERROR"
+        details_log = "Код не найден"
+        template_response = render_template('result.html', status='error', message="Код не найден в системе!")
+        
+    elif promo.is_used:
+        status_log = "USED_AGAIN"
+        details_log = f"Попытка повтора. Использован: {promo.used_by}"
+        template_response = render_template('result.html', status='warning', message=f"ВНИМАНИЕ! Код УЖЕ использован {promo.used_at} пользователем {promo.used_by}")
+        
+    else:
+        # УСПЕШНАЯ АКТИВАЦИЯ
+        promo.is_used = True
+        promo.used_at = datetime.datetime.now()
+        promo.used_by = current_user.username
+        
+        if promo.prize_amount > 0:
+            status_log = "WIN"
+            details_log = f"Выигрыш: {promo.prize_amount}"
+            template_response = render_template('result.html', status='win', amount=promo.prize_amount, code=promo.code)
+        else:
+            status_log = "LOSE"
+            details_log = "Без выигрыша"
+            template_response = render_template('result.html', status='lose', message="К сожалению, в этом коде нет выигрыша.")
+        
+        db.session.commit()
 
-    if promo.is_used:
-        return render_template('result.html', status='warning', message=f"ВНИМАНИЕ! Код УЖЕ использован {promo.used_at} пользователем {promo.used_by}")
-
-    # Если код найден и не использован - АКТИВИРУЕМ
-    promo.is_used = True
-    promo.used_at = datetime.datetime.now()
-    promo.used_by = current_user.username
+    # Запись в историю (Сработает всегда)
+    new_log = ScanLog(username=current_user.username, code_input=code_input, status=status_log, details=details_log)
+    db.session.add(new_log)
     db.session.commit()
 
-    if promo.prize_amount > 0:
-        return render_template('result.html', status='win', amount=promo.prize_amount, code=promo.code)
-    else:
-        return render_template('result.html', status='lose', message="К сожалению, в этом коде нет выигрыша.")
+    return template_response
 
-# --- ЗАПУСК И СОЗДАНИЕ БД ---
-# В продакшене эту часть нужно убрать и делать через init_db
+@app.route('/admin_stats')
+@login_required
+def admin_stats():
+    # ... (логика отчетов) ...
+    total_scans = ScanLog.query.count()
+    total_wins = ScanLog.query.filter_by(status='WIN').count()
+    total_money = db.session.query(func.sum(PromoCode.prize_amount)).filter_by(is_used=True).scalar() or 0
+    
+    logs = ScanLog.query.order_by(ScanLog.timestamp.desc()).limit(50).all()
+    
+    suspicious = db.session.query(
+        ScanLog.username, func.count(ScanLog.id)
+    ).filter(ScanLog.status.in_(['ERROR', 'USED_AGAIN'])).group_by(ScanLog.username).order_by(func.count(ScanLog.id).desc()).all()
+
+    return render_template('admin_stats.html', 
+                        total_scans=total_scans, 
+                        total_wins=total_wins, 
+                        total_money=total_money,
+                        logs=logs,
+                        suspicious=suspicious)
+
+# --- ЗАПУСК (ГЛАВНЫЙ БЛОК) ---
 if __name__ == '__main__':
     with app.app_context():
+        # db.create_all() теперь создаст все 3 таблицы: User, PromoCode, ScanLog
         db.create_all()
-        # Создадим тестового директора, если нет
+        
+        # Создаем тестового админа только если он не существует.
         if not User.query.filter_by(username='admin').first():
             admin = User(username='admin', password_hash=generate_password_hash('admin123'))
             db.session.add(admin)
-            # Создадим пару тестовых кодов
-            db.session.add(PromoCode(code='WIN1000', prize_amount=1000))
-            db.session.add(PromoCode(code='LOSE001', prize_amount=0))
             db.session.commit()
-            print("База создана, админ добавлен (admin/admin123)")
+            print("База создана. Тестовый админ (admin/admin123) добавлен.")
             
     app.run(debug=True, host='0.0.0.0', port=5000)
