@@ -1,12 +1,27 @@
 version: '3.8'
 
 services:
+  # Наш Flask-сервер
+  web:
+    build: .
+    restart: always
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+    env_file:
+      - .env
+    environment:
+      # Важно: здесь 'db' — это имя сервиса ниже
+      DATABASE_URL: postgresql://postgres:147852@db:5432/promodb
+
+  # Наша база данных PostgreSQL
   db:
     image: postgres:15
     restart: always
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 147852
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-147852}"
       POSTGRES_DB: promodb
     ports:
       - "5432:5432"
